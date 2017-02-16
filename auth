@@ -1,0 +1,110 @@
+#!/bin/bash
+
+# Copyright (C) 2014-2017 Uco Mesdag
+# Usage:        auth.sh [OPTIONS]
+#    Google                 Name of the service (case-insensitive).
+#    Dropbox
+#    ...
+
+# Instructions:  Requires the Python authenticator script.
+#    Add your services and their corresponding keys to the auth.key file.
+#    Then make this script executable with "chmod +x auth.sh" and run
+#    it with or without a service name.
+
+# auth.keys file format:
+#    Google:jf2o qdpl po22 5npp rst4 67as x55z 67eh
+
+BASEDIR="$( cd $(dirname "$0") ; pwd )"
+AUTHKEYS="$BASEDIR/auth.keys"
+
+usage() {
+    echo "Usage:    $(basename "$0") [SERVICE NAME]" >/dev/stdout
+    echo "  Google              Name of the service (case-insensitive)." >/dev/stdout
+    echo "  Dropbox                                                    " >/dev/stdout
+    echo "  ...                                                        " >/dev/stdout
+}
+
+if [ $# -gt 1 ]; then
+    usage
+    exit 1
+fi
+
+if [[ "$1" =~ ^.*(help|\?)$ ]]; then
+    usage
+    exit 0
+fi
+
+readkeys() {
+    if [ ! -f "$AUTHKEYS" ]; then
+        echo "File: \"$AUTHKEYS\" does not exist!" >/dev/stdout
+        exit 1
+    fi
+
+    i=0
+    while read -r LINE || [[ -n "$LINE" ]];
+    do
+        if [[ ! "$LINE" =~ ^#.*$ ]] && [[ ! -z "${LINE// }" ]]; then
+            SERVICES[$i]="${LINE%:*}"
+            KEYS[$i]="${LINE#*:}"
+            i=$((i+1))
+        fi
+    done < "$AUTHKEYS"
+
+    if [ ${#KEYS[@]} -eq 0 ]; then
+        echo "File: \"$AUTHKEYS\" is empty!" >/dev/stdout
+        exit 1
+    fi
+}
+
+run() {
+
+    # clear
+    echo -e "\nAvailable services:" >/dev/stdout
+
+    COLS=""
+    for (( i=0; i<${#KEYS[@]}; i++ )); do
+        if [ ${#KEYS[@]} -gt 9 ] && [ $i -le 9 ]; then
+            COLS="$COLS[$i] :\t${SERVICES[$i]}\n"
+        else
+            COLS="$COLS[$i]:\t${SERVICES[$i]}\n"
+        fi
+        eval KEY$i=\"${KEYS[$i]}\"
+    done
+
+    echo -e $COLS | pr -3 -t -w70 -e2 -o2 >/dev/stdout
+    echo >/dev/stdout
+
+    read -p " Select the service you want to generate your token for: [0-$((i-1))]: " NUM
+    eval SECRET=\"\$KEY$NUM\"
+
+    # clear
+    if [ "$SECRET" == "" ]; then
+        run
+    else
+        echo -e "\n You requested a token for: $(echo ${SERVICES[$NUM]} | tr '[:lower:]' '[:upper:]')\n" >/dev/stdout
+        echo -e " $("$BASEDIR/authenticator" --secret="$SECRET")" >/dev/stdout
+    fi
+}
+
+gettoken() {
+    for (( i=0; i<${#SERVICES[@]}; i++ )); do
+        TOLOWER="$(echo ${SERVICES[$i]} | tr '[:upper:]' '[:lower:]')"
+        if [ "$1" == "$TOLOWER" ]; then
+            SECRET="${KEYS[$i]}"
+        fi
+    done
+
+    if [ "$SECRET" == "" ]; then
+        run
+    else
+        echo $("$BASEDIR/authenticator" --secret="$SECRET")
+    fi
+}
+
+if [ $1 ]; then
+    readkeys
+    gettoken "$(echo $1 | tr '[:upper:]' '[:lower:]')"
+else
+    readkeys
+    run
+fi
