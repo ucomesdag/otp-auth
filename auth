@@ -61,12 +61,17 @@ run() {
     # clear
     echo -e "\nAvailable services:" >/dev/stdout
 
-    COLS=""
+    COLS="";SPACE="";LNUM="";READ=1;
+    if [ ${#KEYS[@]} -gt 9 ]; then
+        SPACE=" ";
+        LNUM=0;
+        READ=2;
+    fi
     for (( i=0; i<${#KEYS[@]}; i++ )); do
         if [ ${#KEYS[@]} -gt 9 ] && [ $i -le 9 ]; then
-            COLS="$COLS[$i] :\t${SERVICES[$i]}\n"
+            COLS="$COLS[$LNUM$i] :\t${SERVICES[$i]}\n"
         else
-            COLS="$COLS[$i]:\t${SERVICES[$i]}\n"
+            COLS="$COLS[$i]$SPACE:\t${SERVICES[$i]}\n"
         fi
         eval KEY$i=\"${KEYS[$i]}\"
     done
@@ -74,16 +79,19 @@ run() {
     echo -e $COLS | pr -3 -t -w70 -e2 -o2 >/dev/stdout
     echo >/dev/stdout
 
-    read -p " Select the service you want to generate your token for: [0-$((i-1))]: " NUM
-    eval SECRET=\"\$KEY$NUM\"
+    read -n$READ -p " Select the service you want to generate your token for: [${LNUM}0-$((i-1))]: " NUM
+
+    eval SECRET=\"\$KEY$(echo $NUM | sed -e 's/^0*//' -e 's/^$/0/')\"
 
     # clear
     if [ "$SECRET" == "" ]; then
         run
     else
-        echo -e "\n You requested a token for: $(echo ${SERVICES[$NUM]} | tr '[:lower:]' '[:upper:]')\n" >/dev/stdout
+        echo -e "\n You requested a token for: $(echo ${SERVICES[$(echo $NUM | sed -e 's/^0*//' -e 's/^$/0/')]} | tr '[:lower:]' '[:upper:]')\n" >/dev/stdout
         echo -e " $("$BASEDIR/authenticator" --secret="$SECRET")" >/dev/stdout
     fi
+
+    read -n1 -r
 }
 
 gettoken() {
@@ -108,3 +116,5 @@ else
     readkeys
     run
 fi
+
+exit 0
